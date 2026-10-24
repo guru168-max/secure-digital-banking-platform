@@ -8,7 +8,7 @@ application-local.properties
 # Java / Maven build output
 **/target/
 
-# IntelliJ IDEA
+# IntelliJ
 .idea/
 *.iml
 

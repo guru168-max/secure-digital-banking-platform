@@ -85,4 +85,20 @@ public class BankAccount {
     public User getUser() {
         return user;
     }
+
+    public void deposit(BigDecimal amount) {
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException(
+                    "Deposit amount must be greater than zero"
+            );
+        }
+
+        if (!"ACTIVE".equals(status)) {
+            throw new IllegalStateException(
+                    "Cannot deposit into an inactive account"
+            );
+        }
+
+        this.balance = this.balance.add(amount);
+    }
 }

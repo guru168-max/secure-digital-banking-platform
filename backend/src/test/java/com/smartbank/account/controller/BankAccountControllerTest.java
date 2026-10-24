@@ -12,10 +12,12 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -127,5 +129,86 @@ class BankAccountControllerTest {
                             "Expected 401 or 403, but received " + statusCode
                     );
                 });
+    }
+
+    @Test
+    void shouldDepositMoneyForAuthenticatedCustomer() throws Exception {
+        User user = authenticatedUser();
+
+        when(userRepository.findByEmail("customer@example.com"))
+                .thenReturn(Optional.of(user));
+
+        BankAccount account =
+                new BankAccount("123456789012", user);
+
+        account.deposit(new BigDecimal("500.00"));
+
+        when(bankAccountService.deposit(
+                1L, 1L, new BigDecimal("500.00")))
+                .thenReturn(account);
+
+        mockMvc.perform(post("/api/accounts/1/deposit")
+                        .with(user("customer@example.com"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "amount": 500.00
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountNumber")
+                        .value("123456789012"))
+                .andExpect(jsonPath("$.balance").value(500.00));
+
+        verify(bankAccountService).deposit(
+                1L, 1L, new BigDecimal("500.00"));
+    }
+
+    @Test
+    void shouldRejectZeroDepositAtController() throws Exception {
+        mockMvc.perform(post("/api/accounts/1/deposit")
+                        .with(user("customer@example.com"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "amount": 0
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verify(bankAccountService, never())
+                .deposit(any(), any(), any());
+    }
+
+    @Test
+    void shouldRejectNegativeDepositAtController() throws Exception {
+        mockMvc.perform(post("/api/accounts/1/deposit")
+                        .with(user("customer@example.com"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "amount": -100
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verify(bankAccountService, never())
+                .deposit(any(), any(), any());
+    }
+
+    @Test
+    void shouldRejectMissingDepositAmountAtController() throws Exception {
+        mockMvc.perform(post("/api/accounts/1/deposit")
+                        .with(user("customer@example.com"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        verify(bankAccountService, never())
+                .deposit(any(), any(), any());
     }
 }

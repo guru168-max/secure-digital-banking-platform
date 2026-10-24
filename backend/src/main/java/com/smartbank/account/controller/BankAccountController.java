@@ -1,10 +1,14 @@
 package com.smartbank.account.controller;
 
+
+import org.springframework.web.bind.annotation.RequestBody;
 import com.smartbank.account.dto.BankAccountResponse;
+import com.smartbank.account.dto.DepositRequest;
 import com.smartbank.account.entity.BankAccount;
 import com.smartbank.account.service.BankAccountService;
 import com.smartbank.user.entity.User;
 import com.smartbank.user.repository.UserRepository;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -70,5 +74,23 @@ public class BankAccountController {
                 .orElseThrow(() ->
                         new org.springframework.security.core.userdetails
                                 .UsernameNotFoundException("User not found"));
+    }
+
+
+    @PostMapping("/{accountId}/deposit")
+    public BankAccountResponse deposit(
+            @PathVariable Long accountId,
+            @Valid @RequestBody DepositRequest request,
+            Authentication authentication) {
+
+        User user = getAuthenticatedUser(authentication);
+
+        BankAccount account = bankAccountService.deposit(
+                accountId,
+                user.getId(),
+                request.amount()
+        );
+
+        return BankAccountResponse.from(account);
     }
 }

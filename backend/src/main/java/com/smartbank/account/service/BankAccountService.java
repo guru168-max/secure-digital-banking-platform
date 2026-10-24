@@ -7,6 +7,7 @@ import com.smartbank.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.security.SecureRandom;
 import java.util.List;
 
@@ -50,6 +51,15 @@ public class BankAccountService {
                 .orElseThrow(() ->
                         new IllegalArgumentException(
                                 "Account not found"));
+    }
+
+    @Transactional
+    public BankAccount deposit(Long accountId, Long userId, BigDecimal amount) {
+        BankAccount account = getMyAccount(accountId, userId);
+
+        account.deposit(amount);
+
+        return bankAccountRepository.save(account);
     }
 
     private String generateUniqueAccountNumber() {

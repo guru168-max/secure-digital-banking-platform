@@ -1,0 +1,74 @@
+package com.smartbank.account.controller;
+
+import com.smartbank.account.dto.BankAccountResponse;
+import com.smartbank.account.entity.BankAccount;
+import com.smartbank.account.service.BankAccountService;
+import com.smartbank.user.entity.User;
+import com.smartbank.user.repository.UserRepository;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/accounts")
+public class BankAccountController {
+
+    private final BankAccountService bankAccountService;
+    private final UserRepository userRepository;
+
+    public BankAccountController(
+            BankAccountService bankAccountService,
+            UserRepository userRepository) {
+        this.bankAccountService = bankAccountService;
+        this.userRepository = userRepository;
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public BankAccountResponse createAccount(
+            Authentication authentication) {
+
+        User user = getAuthenticatedUser(authentication);
+
+        BankAccount account =
+                bankAccountService.createAccount(user.getId());
+
+        return BankAccountResponse.from(account);
+    }
+
+    @GetMapping
+    public List<BankAccountResponse> getMyAccounts(
+            Authentication authentication) {
+
+        User user = getAuthenticatedUser(authentication);
+
+        return bankAccountService.getMyAccounts(user.getId())
+                .stream()
+                .map(BankAccountResponse::from)
+                .toList();
+    }
+
+    @GetMapping("/{accountId}")
+    public BankAccountResponse getMyAccount(
+            @PathVariable Long accountId,
+            Authentication authentication) {
+
+        User user = getAuthenticatedUser(authentication);
+
+        BankAccount account = bankAccountService.getMyAccount(
+                accountId,
+                user.getId()
+        );
+
+        return BankAccountResponse.from(account);
+    }
+
+    private User getAuthenticatedUser(Authentication authentication) {
+        return userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() ->
+                        new org.springframework.security.core.userdetails
+                                .UsernameNotFoundException("User not found"));
+    }
+}

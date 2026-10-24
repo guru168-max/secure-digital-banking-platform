@@ -1,6 +1,7 @@
 package com.smartbank.account.controller;
 
 
+import com.smartbank.account.dto.TransferRequest;
 import com.smartbank.transaction.service.TransactionService;
 import com.smartbank.account.dto.BankAccountResponse;
 import com.smartbank.account.dto.DepositRequest;
@@ -128,4 +129,31 @@ public class BankAccountController {
 
         return BankAccountResponse.from(account);
     }
+
+
+
+    @PostMapping("/{accountId}/transfer")
+    public BankAccountResponse transfer(
+            @PathVariable Long accountId,
+            @Valid @RequestBody TransferRequest request,
+            Authentication authentication) {
+
+        User user = getAuthenticatedUser(authentication);
+
+        bankAccountService.transfer(
+                accountId,
+                user.getId(),
+                request.destinationAccountId(),
+                request.amount()
+        );
+
+        // Return the updated source account.
+        BankAccount sourceAccount = bankAccountService.getMyAccount(
+                accountId,
+                user.getId()
+        );
+
+        return BankAccountResponse.from(sourceAccount);
+    }
+
 }

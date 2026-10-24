@@ -390,8 +390,229 @@ class BankAccountServiceTest {
         verifyNoTransactionsSaved();
     }
 
+
+
+    @Test
+    void shouldRejectTransferWhenDestinationAccountDoesNotExist() {
+        BankAccount sourceAccount =
+                new BankAccount("111111111111", user);
+        sourceAccount.deposit(new BigDecimal("500.00"));
+
+        when(bankAccountRepository.findByIdAndUser_Id(10L, 1L))
+                .thenReturn(Optional.of(sourceAccount));
+
+        when(bankAccountRepository.findById(20L))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> bankAccountService.transfer(
+                        10L, 1L, 20L, new BigDecimal("100.00")
+                )
+        );
+
+        assertEquals(
+                0,
+                new BigDecimal("500.00").compareTo(sourceAccount.getBalance())
+        );
+
+        verify(bankAccountRepository, never())
+                .save(any(BankAccount.class));
+
+        verifyNoTransactionsSaved();
+    }
+
+    @Test
+    void shouldRejectTransferToInactiveDestinationAccount() {
+        BankAccount sourceAccount =
+                new BankAccount("111111111111", user);
+        sourceAccount.deposit(new BigDecimal("500.00"));
+
+        User recipient = new User(
+                "Recipient",
+                "recipient@example.com",
+                "hashed-password"
+        );
+
+        BankAccount destinationAccount =
+                new BankAccount("222222222222", recipient);
+
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                destinationAccount, "status", "INACTIVE"
+        );
+
+        when(bankAccountRepository.findByIdAndUser_Id(10L, 1L))
+                .thenReturn(Optional.of(sourceAccount));
+
+        when(bankAccountRepository.findById(20L))
+                .thenReturn(Optional.of(destinationAccount));
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> bankAccountService.transfer(
+                        10L, 1L, 20L, new BigDecimal("100.00")
+                )
+        );
+
+        assertEquals(
+                0,
+                new BigDecimal("500.00").compareTo(sourceAccount.getBalance())
+        );
+
+        assertEquals(
+                0,
+                BigDecimal.ZERO.compareTo(destinationAccount.getBalance())
+        );
+
+        verify(bankAccountRepository, never())
+                .save(any(BankAccount.class));
+
+        verifyNoTransactionsSaved();
+    }
+
+
     private void verifyNoTransactionsSaved() {
         verify(transactionRepository, never())
                 .save(any(Transaction.class));
     }
+
+
+
+    @Test
+    void shouldTransferMoneySuccessfullyAndRecordBothTransactions() {
+        BankAccount sourceAccount =
+                new BankAccount("111111111111", user);
+        sourceAccount.deposit(new BigDecimal("500.00"));
+
+        User recipient = new User(
+                "Recipient",
+                "recipient@example.com",
+                "hashed-password"
+        );
+
+        BankAccount destinationAccount =
+                new BankAccount("222222222222", recipient);
+        destinationAccount.deposit(new BigDecimal("100.00"));
+
+        when(bankAccountRepository.findByIdAndUser_Id(10L, 1L))
+                .thenReturn(Optional.of(sourceAccount));
+
+        when(bankAccountRepository.findById(20L))
+                .thenReturn(Optional.of(destinationAccount));
+
+        when(bankAccountRepository.save(any(BankAccount.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        bankAccountService.transfer(
+                10L, 1L, 20L, new BigDecimal("200.00")
+        );
+
+        assertEquals(
+                0,
+                new BigDecimal("300.00").compareTo(sourceAccount.getBalance())
+        );
+
+        assertEquals(
+                0,
+                new BigDecimal("300.00").compareTo(destinationAccount.getBalance())
+        );
+
+        ArgumentCaptor<Transaction> captor =
+                ArgumentCaptor.forClass(Transaction.class);
+
+        verify(transactionRepository, times(2)).save(captor.capture());
+
+        List<Transaction> transactions = captor.getAllValues();
+
+        assertEquals(TransactionType.TRANSFER_OUT, transactions.get(0).getType());
+        assertEquals(TransactionType.TRANSFER_IN, transactions.get(1).getType());
+
+        assertEquals(
+                0,
+                new BigDecimal("200.00").compareTo(transactions.get(0).getAmount())
+        );
+
+        assertEquals(
+                0,
+                new BigDecimal("200.00").compareTo(transactions.get(1).getAmount())
+        );
+
+        assertEquals(
+                0,
+                new BigDecimal("300.00")
+                        .compareTo(transactions.get(0).getBalanceAfter())
+        );
+
+        assertEquals(
+                0,
+                new BigDecimal("300.00")
+                        .compareTo(transactions.get(1).getBalanceAfter())
+        );
+
+        assertSame(sourceAccount, transactions.get(0).getBankAccount());
+        assertSame(destinationAccount, transactions.get(1).getBankAccount());
+
+        verify(bankAccountRepository).save(sourceAccount);
+        verify(bankAccountRepository).save(destinationAccount);
+    }
+
+    @Test
+    void shouldRejectTransferToSameAccount() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> bankAccountService.transfer(
+                        10L, 1L, 10L, new BigDecimal("100.00")
+                )
+        );
+
+        verify(bankAccountRepository, never())
+                .save(any(BankAccount.class));
+
+        verifyNoTransactionsSaved();
+    }
+
+    @Test
+    void shouldRejectTransferWithInsufficientBalance() {
+        BankAccount sourceAccount =
+                new BankAccount("111111111111", user);
+        sourceAccount.deposit(new BigDecimal("100.00"));
+
+        User recipient = new User(
+                "Recipient",
+                "recipient@example.com",
+                "hashed-password"
+        );
+
+        BankAccount destinationAccount =
+                new BankAccount("222222222222", recipient);
+
+        when(bankAccountRepository.findByIdAndUser_Id(10L, 1L))
+                .thenReturn(Optional.of(sourceAccount));
+
+        when(bankAccountRepository.findById(20L))
+                .thenReturn(Optional.of(destinationAccount));
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> bankAccountService.transfer(
+                        10L, 1L, 20L, new BigDecimal("200.00")
+                )
+        );
+
+        assertEquals(
+                0,
+                new BigDecimal("100.00").compareTo(sourceAccount.getBalance())
+        );
+
+        assertEquals(
+                0,
+                BigDecimal.ZERO.compareTo(destinationAccount.getBalance())
+        );
+
+        verify(bankAccountRepository, never())
+                .save(any(BankAccount.class));
+
+        verifyNoTransactionsSaved();
+    }
+
 }

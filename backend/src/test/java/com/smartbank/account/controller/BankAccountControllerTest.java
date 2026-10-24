@@ -1,6 +1,7 @@
 package com.smartbank.account.controller;
 
 
+import com.smartbank.account.dto.TransferRequest;
 import com.smartbank.transaction.service.TransactionService;
 import com.smartbank.account.entity.BankAccount;
 import com.smartbank.account.service.BankAccountService;
@@ -284,4 +285,78 @@ class BankAccountControllerTest {
         verify(bankAccountService, never())
                 .withdraw(any(), any(), any());
     }
+
+
+    @Test
+    void shouldTransferMoneyForAuthenticatedCustomer() throws Exception {
+        User user = authenticatedUser();
+
+        when(userRepository.findByEmail("customer@example.com"))
+                .thenReturn(Optional.of(user));
+
+        BankAccount sourceAccount =
+                new BankAccount("111111111111", user);
+        sourceAccount.deposit(new BigDecimal("500.00"));
+        sourceAccount.withdraw(new BigDecimal("200.00"));
+
+        when(bankAccountService.getMyAccount(1L, 1L))
+                .thenReturn(sourceAccount);
+
+        mockMvc.perform(post("/api/accounts/1/transfer")
+                        .with(user("customer@example.com"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                                "destinationAccountId": 2,
+                                "amount": 200.00
+                            }
+                            """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountNumber").value("111111111111"))
+                .andExpect(jsonPath("$.balance").value(300.00));
+
+        verify(bankAccountService).transfer(
+                1L, 1L, 2L, new BigDecimal("200.00")
+        );
+
+        verify(bankAccountService).getMyAccount(1L, 1L);
+    }
+
+    @Test
+    void shouldRejectZeroTransferAmountAtController() throws Exception {
+        mockMvc.perform(post("/api/accounts/1/transfer")
+                        .with(user("customer@example.com"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                                "destinationAccountId": 2,
+                                "amount": 0
+                            }
+                            """))
+                .andExpect(status().isBadRequest());
+
+        verify(bankAccountService, never())
+                .transfer(any(), any(), any(), any());
+    }
+
+    @Test
+    void shouldRejectTransferWhenDestinationAccountIdIsMissing()
+            throws Exception {
+        mockMvc.perform(post("/api/accounts/1/transfer")
+                        .with(user("customer@example.com"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                                "amount": 200.00
+                            }
+                            """))
+                .andExpect(status().isBadRequest());
+
+        verify(bankAccountService, never())
+                .transfer(any(), any(), any(), any());
+    }
+
 }

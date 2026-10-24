@@ -106,6 +106,80 @@ public class BankAccountService {
         return account;
     }
 
+
+
+    @Transactional
+    public void transfer(
+            Long sourceAccountId,
+            Long userId,
+            Long destinationAccountId,
+            BigDecimal amount) {
+
+        if (sourceAccountId == null || destinationAccountId == null) {
+            throw new IllegalArgumentException("Account IDs are required");
+        }
+
+        if (sourceAccountId.equals(destinationAccountId)) {
+            throw new IllegalArgumentException(
+                    "Source and destination accounts must be different");
+        }
+
+        // Validate that the source account belongs to the authenticated user.
+        BankAccount sourceAccount =
+                getMyAccount(sourceAccountId, userId);
+
+        // Find and validate the destination account.
+        BankAccount destinationAccount =
+                bankAccountRepository.findById(destinationAccountId)
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "Destination account not found"));
+
+        // Validate both accounts before changing either balance.
+        if (!"ACTIVE".equals(sourceAccount.getStatus())) {
+            throw new IllegalStateException("Source account is not active");
+        }
+
+        if (!"ACTIVE".equals(destinationAccount.getStatus())) {
+            throw new IllegalStateException(
+                    "Destination account is not active");
+        }
+
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException(
+                    "Transfer amount must be greater than zero");
+        }
+
+        if (sourceAccount.getBalance().compareTo(amount) < 0) {
+            throw new IllegalStateException("Insufficient balance");
+        }
+
+        // Perform the transfer only after the validations pass.
+        sourceAccount.withdraw(amount);
+        destinationAccount.deposit(amount);
+
+        bankAccountRepository.save(sourceAccount);
+        bankAccountRepository.save(destinationAccount);
+
+        Transaction outgoingTransaction = new Transaction(
+                TransactionType.TRANSFER_OUT,
+                amount,
+                sourceAccount.getBalance(),
+                sourceAccount
+        );
+
+        Transaction incomingTransaction = new Transaction(
+                TransactionType.TRANSFER_IN,
+                amount,
+                destinationAccount.getBalance(),
+                destinationAccount
+        );
+
+        transactionRepository.save(outgoingTransaction);
+        transactionRepository.save(incomingTransaction);
+    }
+
+
     private String generateUniqueAccountNumber() {
         String accountNumber;
 

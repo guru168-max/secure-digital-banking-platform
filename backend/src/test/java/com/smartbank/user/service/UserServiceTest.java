@@ -1,13 +1,13 @@
+
 package com.smartbank.user.service;
 
 import com.smartbank.user.entity.User;
+import com.smartbank.user.exception.DuplicateEmailException;
 import com.smartbank.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -42,7 +42,14 @@ class UserServiceTest {
 
         assertEquals("Test Customer", savedUser.getFullName());
         assertEquals("customer@example.com", savedUser.getEmail());
-        assertNotEquals("StrongPassword123!", savedUser.getPasswordHash());
+
+        // The stored password must not be the raw password.
+        assertNotEquals(
+                "StrongPassword123!",
+                savedUser.getPasswordHash()
+        );
+
+        // Verify the hash can validate the original password.
         assertTrue(passwordEncoder.matches(
                 "StrongPassword123!",
                 savedUser.getPasswordHash()
@@ -56,8 +63,8 @@ class UserServiceTest {
         when(userRepository.existsByEmail("customer@example.com"))
                 .thenReturn(true);
 
-        assertThrows(
-                IllegalArgumentException.class,
+        DuplicateEmailException exception = assertThrows(
+                DuplicateEmailException.class,
                 () -> userService.registerUser(
                         "Test Customer",
                         "customer@example.com",
@@ -65,6 +72,12 @@ class UserServiceTest {
                 )
         );
 
+        assertEquals(
+                "An account with this email already exists.",
+                exception.getMessage()
+        );
+
+        // A duplicate registration must never save another user.
         verify(userRepository, never()).save(any(User.class));
     }
 }

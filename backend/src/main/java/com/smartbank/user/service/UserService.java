@@ -1,13 +1,13 @@
 package com.smartbank.user.service;
 
 import com.smartbank.user.entity.User;
+import com.smartbank.user.exception.DuplicateEmailException;
 import com.smartbank.user.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
-
 @Service
 public class UserService {
 
@@ -32,7 +32,7 @@ public class UserService {
         String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
 
         if (userRepository.existsByEmail(normalizedEmail)) {
-            throw new IllegalArgumentException(
+            throw new DuplicateEmailException(
                     "An account with this email already exists."
             );
         }

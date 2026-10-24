@@ -2,7 +2,6 @@ package com.smartbank.account.entity;
 
 import com.smartbank.user.entity.User;
 import jakarta.persistence.*;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -101,4 +100,28 @@ public class BankAccount {
 
         this.balance = this.balance.add(amount);
     }
+
+
+    public void withdraw(BigDecimal amount) {
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException(
+                    "Withdrawal amount must be greater than zero"
+            );
+        }
+
+        if (!"ACTIVE".equals(status)) {
+            throw new IllegalStateException(
+                    "Cannot withdraw from an inactive account"
+            );
+        }
+
+        if (this.balance.compareTo(amount) < 0) {
+            throw new IllegalStateException(
+                    "Insufficient account balance"
+            );
+        }
+
+        this.balance = this.balance.subtract(amount);
+    }
+
 }

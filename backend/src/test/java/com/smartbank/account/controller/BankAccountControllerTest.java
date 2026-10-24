@@ -1,5 +1,7 @@
 package com.smartbank.account.controller;
 
+
+import com.smartbank.transaction.service.TransactionService;
 import com.smartbank.account.entity.BankAccount;
 import com.smartbank.account.service.BankAccountService;
 import com.smartbank.security.JwtService;
@@ -26,6 +28,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(BankAccountController.class)
 class BankAccountControllerTest {
+
+
+    @MockitoBean
+    private TransactionService transactionService;
 
     @Autowired
     private MockMvc mockMvc;
@@ -64,8 +70,7 @@ class BankAccountControllerTest {
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.accountNumber")
-                        .value("123456789012"))
+                .andExpect(jsonPath("$.accountNumber").value("123456789012"))
                 .andExpect(jsonPath("$.balance").value(0))
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
 
@@ -88,8 +93,7 @@ class BankAccountControllerTest {
         mockMvc.perform(get("/api/accounts")
                         .with(user("customer@example.com")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].accountNumber")
-                        .value("123456789012"))
+                .andExpect(jsonPath("$[0].accountNumber").value("123456789012"))
                 .andExpect(jsonPath("$[0].balance").value(0));
 
         verify(bankAccountService).getMyAccounts(1L);
@@ -112,8 +116,7 @@ class BankAccountControllerTest {
         mockMvc.perform(get("/api/accounts/1")
                         .with(user("customer@example.com")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accountNumber")
-                        .value("123456789012"));
+                .andExpect(jsonPath("$.accountNumber").value("123456789012"));
 
         verify(bankAccountService).getMyAccount(1L, 1L);
     }
@@ -140,7 +143,6 @@ class BankAccountControllerTest {
 
         BankAccount account =
                 new BankAccount("123456789012", user);
-
         account.deposit(new BigDecimal("500.00"));
 
         when(bankAccountService.deposit(
@@ -157,8 +159,7 @@ class BankAccountControllerTest {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accountNumber")
-                        .value("123456789012"))
+                .andExpect(jsonPath("$.accountNumber").value("123456789012"))
                 .andExpect(jsonPath("$.balance").value(500.00));
 
         verify(bankAccountService).deposit(
@@ -172,9 +173,7 @@ class BankAccountControllerTest {
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {
-                                    "amount": 0
-                                }
+                                {"amount": 0}
                                 """))
                 .andExpect(status().isBadRequest());
 
@@ -189,9 +188,7 @@ class BankAccountControllerTest {
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {
-                                    "amount": -100
-                                }
+                                {"amount": -100}
                                 """))
                 .andExpect(status().isBadRequest());
 
@@ -210,5 +207,81 @@ class BankAccountControllerTest {
 
         verify(bankAccountService, never())
                 .deposit(any(), any(), any());
+    }
+
+    @Test
+    void shouldWithdrawMoneyForAuthenticatedCustomer() throws Exception {
+        User user = authenticatedUser();
+
+        when(userRepository.findByEmail("customer@example.com"))
+                .thenReturn(Optional.of(user));
+
+        BankAccount account =
+                new BankAccount("123456789012", user);
+        account.deposit(new BigDecimal("500.00"));
+        account.withdraw(new BigDecimal("200.00"));
+
+        when(bankAccountService.withdraw(
+                1L, 1L, new BigDecimal("200.00")))
+                .thenReturn(account);
+
+        mockMvc.perform(post("/api/accounts/1/withdraw")
+                        .with(user("customer@example.com"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "amount": 200.00
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountNumber").value("123456789012"))
+                .andExpect(jsonPath("$.balance").value(300.00));
+
+        verify(bankAccountService).withdraw(
+                1L, 1L, new BigDecimal("200.00"));
+    }
+
+    @Test
+    void shouldRejectZeroWithdrawalAtController() throws Exception {
+        mockMvc.perform(post("/api/accounts/1/withdraw")
+                        .with(user("customer@example.com"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"amount": 0}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verify(bankAccountService, never())
+                .withdraw(any(), any(), any());
+    }
+
+    @Test
+    void shouldRejectNegativeWithdrawalAtController() throws Exception {
+        mockMvc.perform(post("/api/accounts/1/withdraw")
+                        .with(user("customer@example.com"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"amount": -100}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verify(bankAccountService, never())
+                .withdraw(any(), any(), any());
+    }
+
+    @Test
+    void shouldRejectMissingWithdrawalAmountAtController() throws Exception {
+        mockMvc.perform(post("/api/accounts/1/withdraw")
+                        .with(user("customer@example.com"))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        verify(bankAccountService, never())
+                .withdraw(any(), any(), any());
     }
 }

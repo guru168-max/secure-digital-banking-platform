@@ -2,6 +2,9 @@ package com.smartbank.account.service;
 
 import com.smartbank.account.entity.BankAccount;
 import com.smartbank.account.repository.BankAccountRepository;
+import com.smartbank.transaction.entity.Transaction;
+import com.smartbank.transaction.entity.TransactionType;
+import com.smartbank.transaction.repository.TransactionRepository;
 import com.smartbank.user.entity.User;
 import com.smartbank.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -16,14 +19,17 @@ public class BankAccountService {
 
     private final BankAccountRepository bankAccountRepository;
     private final UserRepository userRepository;
+    private final TransactionRepository transactionRepository;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
     public BankAccountService(
             BankAccountRepository bankAccountRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            TransactionRepository transactionRepository) {
         this.bankAccountRepository = bankAccountRepository;
         this.userRepository = userRepository;
+        this.transactionRepository = transactionRepository;
     }
 
     @Transactional
@@ -49,17 +55,55 @@ public class BankAccountService {
         return bankAccountRepository
                 .findByIdAndUser_Id(accountId, userId)
                 .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "Account not found"));
+                        new IllegalArgumentException("Account not found"));
     }
 
     @Transactional
-    public BankAccount deposit(Long accountId, Long userId, BigDecimal amount) {
+    public BankAccount deposit(
+            Long accountId,
+            Long userId,
+            BigDecimal amount) {
+
         BankAccount account = getMyAccount(accountId, userId);
 
         account.deposit(amount);
 
-        return bankAccountRepository.save(account);
+        bankAccountRepository.save(account);
+
+        Transaction transaction = new Transaction(
+                TransactionType.DEPOSIT,
+                amount,
+                account.getBalance(),
+                account
+        );
+
+        transactionRepository.save(transaction);
+
+        return account;
+    }
+
+    @Transactional
+    public BankAccount withdraw(
+            Long accountId,
+            Long userId,
+            BigDecimal amount) {
+
+        BankAccount account = getMyAccount(accountId, userId);
+
+        account.withdraw(amount);
+
+        bankAccountRepository.save(account);
+
+        Transaction transaction = new Transaction(
+                TransactionType.WITHDRAWAL,
+                amount,
+                account.getBalance(),
+                account
+        );
+
+        transactionRepository.save(transaction);
+
+        return account;
     }
 
     private String generateUniqueAccountNumber() {
